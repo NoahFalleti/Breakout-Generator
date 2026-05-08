@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WIF Breakout Automation</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0f0f0f;
+    --border: #272727;
+    --accent: #e8ff00;
+    --text: #efefef;
+    --muted: #555;
+    --muted2: #888;
+    --row-a: #161616;
+    --row-b: #121212;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 40px 36px 80px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    margin-bottom: 44px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .subtitle {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .retailer-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+
+  .r-btn {
+    padding: 9px 22px;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    color: var(--muted2);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+
+  .r-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232,255,0,0.05);
+  }
+
+  .r-btn.soon {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .upload-zone {
+    position: relative;
+    border: 1.5px dashed var(--border);
+    border-radius: 3px;
+    padding: 52px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 36px;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(232,255,0,0.025);
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon { font-size: 2.2rem; margin-bottom: 14px; opacity: 0.35; }
+
+  .upload-zone h2 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .upload-zone p {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  .error-box {
+    display: none;
+    background: rgba(255,60,60,0.08);
+    border: 1px solid rgba(255,60,60,0.25);
+    color: #ff6b6b;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    padding: 12px 16px;
+    border-radius: 2px;
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+
+  .output-wrap { display: none; }
+  .output-wrap.visible { display: block; }
+
+  .out-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .date-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+    background: rgba(232,255,0,0.07);
+    border: 1px solid rgba(232,255,0,0.18);
+    padding: 5px 14px;
+    border-radius: 2px;
+    letter-spacing: 0.08em;
+  }
+
+  .action-row { display: flex; gap: 10px; }
+
+  .btn {
+    padding: 8px 18px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1.5px solid transparent;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0f0f0f;
+    border-color: var(--accent);
+    font-weight: 500;
+  }
+  .btn-primary:hover { background: #d4e800; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted2);
+    border-color: var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--muted2); color: var(--text); }
+
+  /* Market block */
+  .market-block {
+    margin-bottom: 48px;
+  }
+
+  .market-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+
+  .market-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.5rem;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .market-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted2);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+  }
+
+  .market-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 14px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+  }
+
+  thead tr {
+    background: #1e1e1e;
+    border-bottom: 1px solid var(--border);
+  }
+
+  thead th {
+    padding: 11px 14px;
+    text-align: left;
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted2);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  thead th.num { text-align: right; }
+
+  tbody tr:nth-child(odd)  { background: var(--row-a); }
+  tbody tr:nth-child(even) { background: var(--row-b); }
+  tbody tr:hover { background: #1c1c1c; }
+
+  tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #1e1e1e;
+    white-space: nowrap;
+  }
+
+  tbody td.num { text-align: right; color: var(--muted2); }
+  tbody td.num.nonzero { color: var(--text); }
+  tbody td.total-col { text-align: right; color: var(--accent); font-weight: 500; }
+  tbody td.sil { color: var(--muted2); font-size: 0.72rem; }
+
+  .market-summary {
+    margin-top: 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+  .market-summary strong { color: var(--muted2); }
+
+  .grand-summary {
+    margin-top: 8px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: #141414;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted2);
+    display: flex;
+    gap: 32px;
+  }
+  .grand-summary strong { color: var(--accent); }
+
+  .reset-row {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  #pasteInput {
+    width: 100%;
+    height: 200px;
+    background: var(--surface, #161616);
+    border: 1.5px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    padding: 16px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  #pasteInput:focus { border-color: var(--accent); }
+  #pasteInput::placeholder { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>WIF BREAKOUT AUTOMATION</h1>
+  <span class="subtitle">Breakout Generator</span>
+</header>
+
+<div class="retailer-row">
+  <button class="r-btn" id="btnDSG" onclick="setRetailer('dsg')">Dick's Sporting Goods</button>
+  <button class="r-btn" id="btnRally" onclick="setRetailer('rally')">Rally House</button>
+</div>
+
+<div class="retailer-row" id="orderTypeRow">
+  <button class="r-btn active" id="btnNewOrder" onclick="setOrderType('new')">New Order</button>
+  <button class="r-btn" id="btnReorder" onclick="setOrderType('reorder')">Reorder</button>
+</div>
+
+<div class="upload-zone" id="uploadZone">
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+  <div class="upload-icon">📋</div>
+  <h2 id="uploadLabel">Drop your DSG buy sheet here</h2>
+  <p>.xlsx &nbsp;·&nbsp; .xls &nbsp;·&nbsp; .csv</p>
+</div>
+
+<div id="pasteZone" style="display:none;">
+  <textarea id="pasteInput" placeholder="Paste your reorder table here..." spellcheck="false"></textarea>
+  <button class="btn btn-primary" style="margin-top:12px;" onclick="handlePaste()">Generate Breakouts</button>
+</div>
+
+<div class="error-box" id="errorBox"></div>
+
+<div class="output-wrap" id="outputWrap">
+  <div class="out-topbar">
+    <div class="date-tag" id="dateTag"></div>
+    <div class="action-row">
+      <button class="btn btn-ghost" id="copyBtn" onclick="copyTSV()">Copy for Sheets</button>
+      <button class="btn btn-primary" onclick="resetTool()">New File</button>
+    </div>
+  </div>
+
+  <div id="marketsContainer"></div>
+
+  <div class="grand-summary" id="grandSummary"></div>
+
+  <div class="reset-row">
+    <button class="btn btn-ghost" onclick="resetTool()">← Upload another file</button>
+  </div>
+</div>
+
+<script>
+// ── Size scales ───────────────────────────────────────────────────────────────
+const SIZE_SCALES = {
+  'S-XXL':  { indices: [1,2,3,4,5], ratios: [2,2,3,3,2] },
+  'XS-XL':  { indices: [0,1,2,3,4], ratios: [2,3,3,3,1] },
+  'S-XL':   { indices: [1,2,3,4],   ratios: [3,4,3,2]   },
+  'S-XL-Y': { indices: [1,2,3,4],   ratios: [2,4,4,2]   }, // youth
+};
+
+// ── Reorder silhouette → size scale lookup ────────────────────────────────────
+const REORDER_SIL_SCALE = {
+  'Tee':                    { range: 'S-XXL',  ratios: [2,2,3,3,2], indices: [1,2,3,4,5] },
+  'Hoodie':                 { range: 'S-XXL',  ratios: [2,2,3,3,2], indices: [1,2,3,4,5] },
+  'Crew Sweatshirt':        { range: 'S-XXL',  ratios: [2,3,3,3,1], indices: [1,2,3,4,5] },
+  'Cropped Tee':            { range: 'XS-XL',  ratios: [2,3,3,3,1], indices: [0,1,2,3,4] },
+  'Cropped Crew Sweatshirt':{ range: 'XS-XL',  ratios: [2,3,3,3,1], indices: [0,1,2,3,4] },
+  'Easy Tee':               { range: 'XS-XL',  ratios: [2,3,3,3,1], indices: [0,1,2,3,4] },
+  'Pullover Hoodie':        { range: 'XS-XL',  ratios: [2,3,3,3,1], indices: [0,1,2,3,4] },
+  'High Neck Tank':         { range: 'S-XL',   ratios: [3,4,3,2],   indices: [1,2,3,4]   },
+  'Youth Tee':              { range: 'S-XL',   ratios: [2,4,4,2],   indices: [1,2,3,4]   },
+};
+
+// ── Order type & retailer state ───────────────────────────────────────────────
+let currentOrderType = 'new';
+let currentRetailer  = 'dsg';
+
+function setRetailer(r) {
+  currentRetailer = r;
+  document.getElementById('btnDSG').classList.toggle('active', r === 'dsg');
+  document.getElementById('btnRally').classList.toggle('active', r === 'rally');
+  // Rally House only has new orders (file upload), hide order type toggle
+  document.getElementById('orderTypeRow').style.display = r === 'rally' ? 'none' : '';
+  // Always show upload zone for Rally
+  if (r === 'rally') {
+    document.getElementById('uploadZone').style.display  = '';
+    document.getElementById('pasteZone').style.display   = 'none';
+    currentOrderType = 'new';
+  }
+  document.getElementById('uploadLabel').textContent =
+    r === 'rally' ? 'Drop your Rally House file here' : 'Drop your DSG buy sheet here';
+  resetTool();
+}
+
+function setOrderType(type) {
+  currentOrderType = type;
+  document.getElementById('btnNewOrder').classList.toggle('active', type === 'new');
+  document.getElementById('btnReorder').classList.toggle('active', type === 'reorder');
+  document.getElementById('uploadZone').style.display  = type === 'new'     ? '' : 'none';
+  document.getElementById('pasteZone').style.display   = type === 'reorder' ? '' : 'none';
+  resetTool();
+}
+
+function handlePaste() {
+  const raw = document.getElementById('pasteInput').value.trim();
+  if (!raw) { showError('Nothing pasted yet.'); return; }
+
+  const rawLines = raw.split('\n').map(l => l.trim()).filter(l => l);
+  const hasTabs = rawLines.some(l => l.includes('\t'));
+
+  let lines;
+  if (hasTabs) {
+    // Tab-separated: each line is a full row
+    lines = rawLines.map(l => l.split('\t').map(c => c.trim()));
+  } else {
+    // One cell per line — group every 3 lines into [Style, Style Description, Units]
+    // Find the header start by looking for "Style" followed by "Style Description" followed by "Units"
+    let startIdx = -1;
+    for (let i = 0; i < rawLines.length - 2; i++) {
+      if (
+        rawLines[i].toLowerCase() === 'style' &&
+        rawLines[i+1].toLowerCase() === 'style description' &&
+        rawLines[i+2].toLowerCase() === 'units'
+      ) {
+        startIdx = i;
+        break;
+      }
+    }
+    if (startIdx === -1) {
+      showError('Could not find headers (Style / Style Description / Units). Make sure you paste the full table including the header row.');
+      return;
+    }
+    lines = [];
+    for (let i = startIdx; i + 2 < rawLines.length; i += 3) {
+      lines.push([rawLines[i], rawLines[i+1], rawLines[i+2]]);
+    }
+    // If last group is incomplete, drop it
+    if (lines.length > 0 && lines[lines.length-1].length < 3) lines.pop();
+  }
+
+  // Now lines[0] = header, lines[1..] = data
+  const header = lines[0].map(c => c.toLowerCase());
+  const colStyle = header.findIndex(h => h === 'style');
+  const colDesc  = header.findIndex(h => h === 'style description');
+  const colUnits = header.findIndex(h => h === 'units');
+
+  if (colDesc === -1 || colUnits === -1) {
+    showError('Could not find "Style Description" or "Units" columns.');
+    return;
+  }
+
+  const results = [];
+  for (let r = 1; r < lines.length; r++) {
+    const row = lines[r];
+    const styleDesc = (row[colDesc]  || '').trim();
+    const styleCode = colStyle >= 0 ? (row[colStyle] || '').trim().toUpperCase() : '';
+    const total     = parseFloat(row[colUnits] || 0);
+
+    if (!styleDesc || total <= 0) continue;
+
+    const silhouette = getSilhouette('', styleDesc + ' ' + styleCode);
+    const scaleInfo  = REORDER_SIL_SCALE[silhouette];
+    if (!scaleInfo) continue;
+
+    const { indices, ratios } = scaleInfo;
+    const totalParts = ratios.reduce((a, b) => a + b, 0);
+    const unit = total / totalParts;
+    const breakout = new Array(7).fill(0);
+    ratios.forEach((r2, i) => { breakout[indices[i]] = r2 * unit; });
+
+    results.push({ styleDesc, color: '', silhouette, breakout, total });
+  }
+
+  if (results.length === 0) {
+    showError('No valid rows found. Check that Style Description and Units are populated.');
+    return;
+  }
+
+  document.getElementById('errorBox').style.display = 'none';
+  renderAll([{ name: 'Reorder', rows: results }]);
+}
+
+// ── Color normalization ───────────────────────────────────────────────────────
+function normalizeColor(rawColor, silhouette, styleDesc) {
+  const c = (rawColor   || '').trim().toUpperCase();
+  const s = (silhouette || '').toLowerCase();
+  const d = (styleDesc  || '').toUpperCase();
+
+  const isEasyTee  = d.includes('EASY') || s.includes('easy');
+  const isCotton   = s.includes('cotton');
+
+  const isWhite = c === 'WHT' || c === 'WHITE';
+  const isCream = c === 'CRM' || c === 'CREAM' || c === 'NATURAL' || c === 'OAT' || c === 'OATMEAL';
+  const isMineral = c === 'MINERAL';
+
+  if (isWhite) {
+    if (isEasyTee)  return 'White';
+    if (isCotton)   return 'White Cotton';
+    return 'Ash';
+  }
+
+  if (isCream) {
+    if (isEasyTee)  return 'Bone';
+    if (isCotton)   return 'Bone Cotton';
+    return 'Oatmeal';
+  }
+
+  if (isMineral) {
+    if (isCotton)   return 'Mineral Cotton';
+    return 'Mineral';
+  }
+
+  // Known color name mappings
+  const colorMap = {
+    'LT BLUE': 'Light Blue',
+    'LT GREY': 'Light Gray',
+    'LT GRAY': 'Light Gray',
+    'DK GREY': 'Dark Gray',
+    'DK GRAY': 'Dark Gray',
+    'NVY': 'Navy',
+    'NAVY': 'Navy',
+    'BLU': 'Royal',
+    'BLK': 'Black',
+    'BLACK': 'Black',
+    'RED': 'Red',
+    'RYL': 'Royal',
+    'ROYAL': 'Royal',
+    'GRN': 'Green',
+    'GREEN': 'Green',
+    'PNK': 'Pink',
+    'PINK': 'Pink',
+    'PRP': 'Purple',
+    'PURPLE': 'Purple',
+    'GRY': 'Gray',
+    'GREY': 'Gray',
+    'GRAY': 'Gray',
+    'TAN': 'Tan',
+    'SAND': 'Sand',
+    'GOLD': 'Gold',
+    'MAROON': 'Maroon',
+    'ORANGE': 'Orange',
+    'KELLY': 'Kelly Green',
+  };
+
+  const upper = c.trim();
+  if (colorMap[upper]) return colorMap[upper];
+
+  // Title-case fallback
+  return rawColor.trim().replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+// ── Silhouette mapping ────────────────────────────────────────────────────────
+function getSilhouette(rawSil, styleDesc) {
+  const d = (styleDesc || '').toUpperCase();
+  const s = (rawSil    || '').toLowerCase();
+
+  // Check raw silhouette column first for Easy Tee before any style desc rules
+  if (s.includes('easy'))              return 'Easy Tee';
+
+  if (d.includes('WLSC'))              return 'Cropped Crew Sweatshirt';
+  if (d.includes('WSSC'))              return 'Cropped Tee';
+  if (d.includes('EASY'))              return 'Easy Tee';
+  if (/CROP.{0,3}HOO?D/i.test(d))     return 'Pullover Hoodie';
+  if (d.includes('CREW'))              return 'Crew Sweatshirt';
+  if (d.includes('WTNK') || d.includes('TNK'))  return 'High Neck Tank';
+  if (d.includes('YOUTH') || d.includes('YTH') || d.includes('YSS') || d.includes('YSST')) return 'Youth Tee';
+  if (d.includes('HOOD') || d.includes('HOODY') || d.includes('HDY') || d.includes(' HD ') || d.endsWith(' HD')) return 'Hoodie';
+  if (d.includes(' CR ') || d.endsWith(' CR'))  return 'Crew Sweatshirt';
+  if (d.includes('SST') || d.includes('TEE') || d.includes(' SS ') || d.endsWith(' SS')) return 'Tee';
+
+  if (s.includes('youth'))             return 'Youth Tee';
+  if (s.includes('crop tank'))         return 'High Neck Tank';
+  if (s.includes('crop tee'))          return 'Cropped Tee';
+  if (s.includes('crop') && s.includes('hood')) return 'Pullover Hoodie';
+  if (s.includes('hood') || s.includes('hoody')) return 'Hoodie';
+  if (s.includes('crew'))              return 'Crew Sweatshirt';
+  if (s.includes('tank'))              return 'High Neck Tank';
+  if (s.includes('tee') || s.includes('t-shirt')) return 'Tee';
+
+  return rawSil || '';
+}
+
+// ── Breakout calculator ───────────────────────────────────────────────────────
+function calcBreakout(total, sizeRange) {
+  const scale = SIZE_SCALES[sizeRange];
+  if (!scale) return null;
+  const { indices, ratios } = scale;
+  const totalParts = ratios.reduce((a,b) => a+b, 0);
+  const unit = total / totalParts;
+  const result = new Array(7).fill(0);
+  ratios.forEach((r, i) => { result[indices[i]] = r * unit; });
+  return result;
+}
+
+// ── Parse a single sheet ──────────────────────────────────────────────────────
+function parseSheet(sheet) {
+  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  // Find the row that contains "Style Description"
+  let styleDescRow = -1;
+  let colStyle = -1;
+
+  for (let r = 0; r < Math.min(30, raw.length); r++) {
+    for (let c = 0; c < raw[r].length; c++) {
+      const v = String(raw[r][c]).trim().toLowerCase();
+      if (v === 'style description') {
+        styleDescRow = r;
+        colStyle = c;
+        break;
+      }
+    }
+    if (styleDescRow >= 0) break;
+  }
+
+  if (styleDescRow < 0) return [];
+
+  // From the same header row, find Silhouette and Style#
+  let colSil = -1, colStyleNum = -1;
+  const hRow = raw[styleDescRow].map(c => String(c).trim().toLowerCase());
+  hRow.forEach((h, i) => {
+    if (h === 'silhouette' && colSil === -1)          colSil = i;
+    if ((h === 'style#' || h === 'style #') && colStyleNum === -1) colStyleNum = i;
+  });
+
+  // The next row (styleDescRow + 1) contains sub-headers: Color, Range, Scale, Cost, Retail, IMU%, Total Doors, Units...
+  // We need to find: Body Color col, Size Range col, Size Scale col, TOTAL col
+  let colColor = -1, colSizeRange = -1, colSizeScale = -1, colTotal = -1;
+
+  // Look at row styleDescRow and styleDescRow+1 for "Body"/"Color", "Size"/"Range", "Size"/"Scale", "TOTAL"
+  // Strategy: scan both rows together
+  const subRow = styleDescRow + 1 < raw.length ? raw[styleDescRow + 1].map(c => String(c).trim().toLowerCase()) : [];
+
+  // "Body" appears in styleDescRow, "Color" appears below it in subRow — same column
+  // "Size" appears twice in styleDescRow, "Range" and "Scale" appear below
+  // "TOTAL" appears in styleDescRow
+
+  hRow.forEach((h, i) => {
+    if (h === 'body')  colColor    = i;  // subRow[i] will be "color"
+    if (h === 'total') colTotal    = i;
+  });
+
+  // Find Size Range and Size Scale from the subRow under "Size" columns
+  // There are two "Size" headers — first is Range, second is Scale
+  let sizeCount = 0;
+  hRow.forEach((h, i) => {
+    if (h === 'size') {
+      sizeCount++;
+      if (sizeCount === 1) colSizeRange = i;
+      if (sizeCount === 2) colSizeScale = i;
+    }
+  });
+
+  // Data starts at styleDescRow + 2
+  const dataStart = styleDescRow + 2;
+  const results = [];
+
+  for (let r = dataStart; r < raw.length; r++) {
+    const row = raw[r];
+    if (!row || row.length === 0) continue;
+
+    const styleDesc = colStyle >= 0 ? String(row[colStyle] || '').trim() : '';
+    if (!styleDesc) continue;
+    if (styleDesc.toLowerCase().includes('total') || styleDesc.toLowerCase().includes('graphic')) continue;
+
+    const color     = colColor     >= 0 ? String(row[colColor]     || '').trim() : '';
+    const silRaw    = colSil       >= 0 ? String(row[colSil]       || '').trim() : '';
+    const sizeRange = colSizeRange >= 0 ? String(row[colSizeRange] || '').trim() : '';
+    let   total     = colTotal     >= 0 ? parseFloat(row[colTotal] || 0) : 0;
+
+    if (!sizeRange || !SIZE_SCALES[sizeRange] || total <= 0) continue;
+
+    const breakout = calcBreakout(total, sizeRange);
+    if (!breakout) continue;
+
+    const silhouette = getSilhouette(silRaw, styleDesc);
+    results.push({
+      styleDesc,
+      color: normalizeColor(color, silRaw, styleDesc),
+      silhouette,
+      breakout,
+      total
+    });
+  }
+
+  return results;
+}
+
+// ── Reorder parser ────────────────────────────────────────────────────────────
+function parseReorder(workbook) {
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  // Find header row with "Style Description" and "Units"
+  let headerRow = -1, colStyle = -1, colDesc = -1, colUnits = -1;
+
+  for (let r = 0; r < Math.min(20, raw.length); r++) {
+    const row = raw[r].map(c => String(c).trim().toLowerCase());
+    const descIdx = row.findIndex(c => c === 'style description');
+    if (descIdx >= 0) {
+      headerRow = r;
+      colDesc  = descIdx;
+      row.forEach((h, i) => {
+        if (h === 'style' && colStyle === -1) colStyle = i;
+        if (h === 'units' && colUnits === -1) colUnits = i;
+      });
+      break;
+    }
+  }
+
+  if (headerRow === -1) throw new Error('Could not find header row with "Style Description" column.');
+
+  const results = [];
+
+  for (let r = headerRow + 1; r < raw.length; r++) {
+    const row = raw[r];
+    const styleDesc = String(row[colDesc] || '').trim();
+    if (!styleDesc) continue;
+
+    const total = colUnits >= 0 ? parseFloat(row[colUnits] || 0) : 0;
+    if (total <= 0) continue;
+
+    // Derive silhouette from style code and description
+    const styleCode = colStyle >= 0 ? String(row[colStyle] || '').trim().toUpperCase() : '';
+    const silhouette = getSilhouette('', styleDesc + ' ' + styleCode);
+
+    const scaleInfo = REORDER_SIL_SCALE[silhouette];
+    if (!scaleInfo) continue;
+
+    const { indices, ratios } = scaleInfo;
+    const totalParts = ratios.reduce((a, b) => a + b, 0);
+    const unit = total / totalParts;
+    const breakout = new Array(7).fill(0);
+    ratios.forEach((r2, i) => { breakout[indices[i]] = r2 * unit; });
+
+    results.push({ styleDesc, color: '', silhouette, breakout, total });
+  }
+
+  return [{ name: 'Reorder', rows: results }];
+}
+
+// ── All parsed markets (stored for copy) ─────────────────────────────────────
+let allMarkets = [];
+
+// ── Render all markets ────────────────────────────────────────────────────────
+function renderAll(markets) {
+  allMarkets = markets;
+  const container = document.getElementById('marketsContainer');
+  container.innerHTML = '';
+  const isReorder = currentOrderType === 'reorder';
+
+  let grandTotal = 0;
+  let grandStyles = 0;
+
+  markets.forEach(({ name, rows }) => {
+    if (rows.length === 0) return;
+
+    const block = document.createElement('div');
+    block.className = 'market-block';
+
+    const mktUnits = rows.reduce((a, b) => a + b.total, 0);
+    grandTotal  += mktUnits;
+    grandStyles += rows.length;
+
+    block.innerHTML = `
+      <div class="market-header">
+        <div class="market-name">${name.toUpperCase()}</div>
+        <div class="market-count">${rows.length} style${rows.length !== 1 ? 's' : ''} &nbsp;·&nbsp; ${mktUnits.toLocaleString()} units</div>
+      </div>
+      <div class="market-divider"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Style Description</th>
+              <th>Color</th>
+              <th>Silhouette</th>
+              <th class="num">XS</th>
+              <th class="num">S</th>
+              <th class="num">M</th>
+              <th class="num">L</th>
+              <th class="num">XL</th>
+              <th class="num">XXL</th>
+              <th class="num">XXXL</th>
+              <th class="num">Total</th>
+            </tr>
+          </thead>
+          <tbody>${rows.map(row => `
+            <tr>
+              <td>${row.styleDesc}</td>
+              <td>${row.color}</td>
+              <td class="sil">${row.silhouette}</td>
+              ${row.breakout.map(q => `<td class="num${q > 0 ? ' nonzero' : ''}">${q}</td>`).join('')}
+              <td class="total-col">${row.total}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    container.appendChild(block);
+  });
+
+  document.getElementById('grandSummary').innerHTML =
+    `<span>Total &nbsp;·&nbsp; <strong>${grandStyles} styles</strong></span>
+     <span><strong>${grandTotal.toLocaleString()} units</strong> across ${markets.filter(m => m.rows.length > 0).length} market${markets.filter(m => m.rows.length > 0).length !== 1 ? 's' : ''}</span>`;
+
+  const now = new Date();
+  document.getElementById('dateTag').textContent =
+    (now.getMonth()+1) + '/' + now.getDate() + '/' + now.getFullYear();
+
+  document.getElementById('outputWrap').classList.add('visible');
+}
+
+// ── Copy as TSV ───────────────────────────────────────────────────────────────
+function copyTSV() {
+  const lines = [];
+
+  allMarkets.forEach(({ rows }, i) => {
+    if (rows.length === 0) return;
+    rows.forEach(row => {
+      lines.push([row.styleDesc, row.color, row.silhouette, ...row.breakout, row.total].join('\t'));
+    });
+    // blank line between markets
+    if (i < allMarkets.length - 1) lines.push('');
+  });
+
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy for Sheets', 1800);
+  });
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+function resetTool() {
+  document.getElementById('outputWrap').classList.remove('visible');
+  document.getElementById('marketsContainer').innerHTML = '';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('pasteInput').value = '';
+  document.getElementById('errorBox').style.display = 'none';
+  allMarkets = [];
+}
+
+// ── File handling ─────────────────────────────────────────────────────────────
+// ── Rally House parser ────────────────────────────────────────────────────────
+function parseRallyHouse(workbook) {
+  const allResults = [];
+
+  workbook.SheetNames.forEach(sheetName => {
+    const sheet = workbook.Sheets[sheetName];
+    const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (!raw || raw.length < 2) return;
+
+    // Find header row
+    let headerRow = -1;
+    let colColor = -1, colDesc = -1, colQty = -1, colSize = -1, colStyle = -1;
+
+    for (let r = 0; r < Math.min(5, raw.length); r++) {
+      const row = raw[r].map(c => String(c).trim().toUpperCase());
+      const descIdx = row.findIndex(h => h === 'DESCRIPTION');
+      if (descIdx >= 0) {
+        headerRow = r;
+        row.forEach((h, i) => {
+          if (h === 'COLOR')       colColor = i;
+          if (h === 'DESCRIPTION') colDesc  = i;
+          if (h === 'QUANTITY')    colQty   = i;
+          if (h === 'SIZE')        colSize  = i;
+          if (h === 'STYLE')       colStyle = i;
+        });
+        break;
+      }
+    }
+
+    if (headerRow === -1) return;
+
+    // Size label → index in [XS, S, M, L, XL, XXL, XXXL]
+    const sizeIndex = {
+      'XS': 0, 'S': 1, 'SM': 1, 'M': 2, 'MD': 2,
+      'L': 3, 'LG': 3, 'XL': 4, 'XXL': 5, '2XL': 5,
+      'XXXL': 6, '3XL': 6
+    };
+
+    // Group rows by STYLE number
+    const styleMap = new Map();
+
+    for (let r = headerRow + 1; r < raw.length; r++) {
+      const row = raw[r];
+      const desc     = String(row[colDesc]  || '').trim();
+      const color    = String(row[colColor] || '').trim();
+      const styleNum = String(row[colStyle] || '').trim();
+      const sizeRaw  = String(row[colSize]  || '').trim().toUpperCase();
+      const qty      = parseFloat(row[colQty] || 0);
+
+      if (!desc || !styleNum || qty <= 0) continue;
+
+      const sIdx = sizeIndex[sizeRaw];
+      if (sIdx === undefined) continue;
+
+      if (!styleMap.has(styleNum)) {
+        styleMap.set(styleNum, {
+          styleDesc: desc,
+          color: normalizeColor(color, '', desc),
+          silhouette: getSilhouette('', desc),
+          breakout: new Array(7).fill(0),
+          total: 0
+        });
+      }
+
+      const entry = styleMap.get(styleNum);
+      entry.breakout[sIdx] += qty;
+      entry.total          += qty;
+    }
+
+    if (styleMap.size > 0) {
+      allResults.push({
+        name: sheetName,
+        rows: Array.from(styleMap.values())
+      });
+    }
+  });
+
+  return allResults;
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+
+      const markets = currentRetailer === 'rally'
+        ? parseRallyHouse(wb)
+        : currentOrderType === 'reorder'
+          ? parseReorder(wb)
+          : wb.SheetNames.map(name => ({ name, rows: parseSheet(wb.Sheets[name]) }));
+
+      const totalRows = markets.reduce((a, m) => a + m.rows.length, 0);
+      if (totalRows === 0) {
+        showError('No valid product rows found across any tabs.\n\nMake sure the file has "Style Description", "Size" (Range/Scale), and "TOTAL" columns populated.');
+        return;
+      }
+
+      document.getElementById('errorBox').style.display = 'none';
+      renderAll(markets);
+    } catch(err) {
+      showError('Could not parse file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.textContent = '⚠ ' + msg;
+  box.style.display = 'block';
+}
+
+// ── Events ────────────────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+// Initialize
+document.getElementById('btnDSG').classList.add('active');
+
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  handleFile(e.dataTransfer.files[0]);
+});
+</script>
+</body>
+</html>
