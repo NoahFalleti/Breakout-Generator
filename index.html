@@ -871,28 +871,6 @@ function parseRallyHouse(workbook) {
     const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     if (!raw || raw.length < 2) return;
 
-    // Find header row
-    let headerRow = -1;
-    let colColor = -1, colDesc = -1, colQty = -1, colSize = -1, colStyle = -1;
-
-    for (let r = 0; r < Math.min(5, raw.length); r++) {
-      const row = raw[r].map(c => String(c).trim().toUpperCase());
-      const descIdx = row.findIndex(h => h === 'DESCRIPTION');
-      if (descIdx >= 0) {
-        headerRow = r;
-        row.forEach((h, i) => {
-          if (h === 'COLOR')       colColor = i;
-          if (h === 'DESCRIPTION') colDesc  = i;
-          if (h === 'QUANTITY')    colQty   = i;
-          if (h === 'SIZE')        colSize  = i;
-          if (h === 'STYLE')       colStyle = i;
-        });
-        break;
-      }
-    }
-
-    if (headerRow === -1) return;
-
     // Size label → index in [XS, S, M, L, XL, XXL, XXXL]
     const sizeIndex = {
       'XS': 0, 'S': 1, 'SM': 1, 'M': 2, 'MD': 2,
@@ -900,24 +878,48 @@ function parseRallyHouse(workbook) {
       'XXXL': 6, '3XL': 6
     };
 
-    // Group rows by STYLE number
+    const header = raw[0].map(c => String(c).trim().toUpperCase());
+
+    // Detect format A: has explicit SIZE column
+    const colSize  = header.findIndex(h => h === 'SIZE');
+    const colStyle = header.findIndex(h => h === 'STYLE');
+
+    // Detect format B: has ITEM and VENDOR PART NUMBER columns (no SIZE column)
+    const colItem    = header.findIndex(h => h === 'ITEM');
+    const colVPN     = header.findIndex(h => h === 'VENDOR PART NUMBER');
+
+    const colColor = header.findIndex(h => h === 'COLOR');
+    const colDesc  = header.findIndex(h => h === 'DESCRIPTION');
+    const colQty   = header.findIndex(h => h === 'QUANTITY');
+
     const styleMap = new Map();
 
-    for (let r = headerRow + 1; r < raw.length; r++) {
+    for (let r = 1; r < raw.length; r++) {
       const row = raw[r];
-      const desc     = String(row[colDesc]  || '').trim();
-      const color    = String(row[colColor] || '').trim();
-      const styleNum = String(row[colStyle] || '').trim();
-      const sizeRaw  = String(row[colSize]  || '').trim().toUpperCase();
-      const qty      = parseFloat(row[colQty] || 0);
+      const desc  = String(row[colDesc]  || '').trim();
+      const color = String(row[colColor] || '').trim();
+      const qty   = parseFloat(row[colQty] || 0);
+      if (!desc || qty <= 0) continue;
 
-      if (!desc || !styleNum || qty <= 0) continue;
+      let sizeRaw, groupKey;
+
+      if (colSize >= 0) {
+        // Format A: explicit SIZE and STYLE columns
+        sizeRaw  = String(row[colSize]  || '').trim().toUpperCase();
+        groupKey = colStyle >= 0 ? String(row[colStyle] || '').trim() : desc;
+      } else if (colItem >= 0) {
+        // Format B: extract size from end of Item column e.g. "485438522 : 485438522-XL"
+        const itemStr = String(row[colItem] || '').trim();
+        const match   = itemStr.match(/-([A-Z0-9]+)$/);
+        sizeRaw  = match ? match[1].toUpperCase() : '';
+        groupKey = colVPN >= 0 ? String(row[colVPN] || '').trim() : desc;
+      } else continue;
 
       const sIdx = sizeIndex[sizeRaw];
       if (sIdx === undefined) continue;
 
-      if (!styleMap.has(styleNum)) {
-        styleMap.set(styleNum, {
+      if (!styleMap.has(groupKey)) {
+        styleMap.set(groupKey, {
           styleDesc: desc,
           color: normalizeColor(color, '', desc),
           silhouette: getSilhouette('', desc),
@@ -926,16 +928,13 @@ function parseRallyHouse(workbook) {
         });
       }
 
-      const entry = styleMap.get(styleNum);
+      const entry = styleMap.get(groupKey);
       entry.breakout[sIdx] += qty;
       entry.total          += qty;
     }
 
     if (styleMap.size > 0) {
-      allResults.push({
-        name: sheetName,
-        rows: Array.from(styleMap.values())
-      });
+      allResults.push({ name: sheetName, rows: Array.from(styleMap.values()) });
     }
   });
 
