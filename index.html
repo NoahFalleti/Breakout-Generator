@@ -430,12 +430,14 @@ function handlePaste() {
 
   let lines;
   if (hasTabs) {
-    // Tab-separated: each line is a full row
     lines = rawLines.map(l => l.split('\t').map(c => c.trim()));
   } else {
-    // One cell per line — group every 3 lines into [Style, Style Description, Units]
-    // Find the header start by looking for "Style" followed by "Style Description" followed by "Units"
+    // One cell per line — detect column count from header
+    // Look for known header sequences
     let startIdx = -1;
+    let colCount = 0;
+
+    // Format A: Style / Style Description / Units (3 cols)
     for (let i = 0; i < rawLines.length - 2; i++) {
       if (
         rawLines[i].toLowerCase() === 'style' &&
@@ -443,29 +445,46 @@ function handlePaste() {
         rawLines[i+2].toLowerCase() === 'units'
       ) {
         startIdx = i;
+        colCount = 3;
         break;
       }
     }
+
+    // Format B: Style # / Style Desc / Vendor / NEED / Size Range / Size Scale (6 cols)
     if (startIdx === -1) {
-      showError('Could not find headers (Style / Style Description / Units). Make sure you paste the full table including the header row.');
+      for (let i = 0; i < rawLines.length - 5; i++) {
+        if (
+          (rawLines[i].toLowerCase() === 'style #' || rawLines[i].toLowerCase() === 'style#') &&
+          rawLines[i+1].toLowerCase().includes('style desc') &&
+          rawLines[i+3].toLowerCase().includes('need')
+        ) {
+          startIdx = i;
+          colCount = 6;
+          break;
+        }
+      }
+    }
+
+    if (startIdx === -1) {
+      showError('Could not find a recognized header row. Make sure you paste the full table including headers.');
       return;
     }
+
     lines = [];
-    for (let i = startIdx; i + 2 < rawLines.length; i += 3) {
-      lines.push([rawLines[i], rawLines[i+1], rawLines[i+2]]);
+    for (let i = startIdx; i + colCount - 1 < rawLines.length; i += colCount) {
+      lines.push(rawLines.slice(i, i + colCount));
     }
-    // If last group is incomplete, drop it
-    if (lines.length > 0 && lines[lines.length-1].length < 3) lines.pop();
   }
 
-  // Now lines[0] = header, lines[1..] = data
   const header = lines[0].map(c => c.toLowerCase());
-  const colStyle = header.findIndex(h => h === 'style');
-  const colDesc  = header.findIndex(h => h === 'style description');
-  const colUnits = header.findIndex(h => h === 'units');
+  const colDesc      = header.findIndex(h => h.includes('style desc'));
+  const colUnits     = header.findIndex(h => h === 'units' || h === 'need');
+  const colSizeRange = header.findIndex(h => h.includes('size range'));
+  const colSizeScale = header.findIndex(h => h.includes('size scale'));
+  const colStyle     = header.findIndex(h => h === 'style' || h === 'style #' || h === 'style#');
 
   if (colDesc === -1 || colUnits === -1) {
-    showError('Could not find "Style Description" or "Units" columns.');
+    showError('Could not find required columns. Make sure your table has Style Description and Units/NEED columns.');
     return;
   }
 
@@ -475,24 +494,47 @@ function handlePaste() {
     const styleDesc = (row[colDesc]  || '').trim();
     const styleCode = colStyle >= 0 ? (row[colStyle] || '').trim().toUpperCase() : '';
     const total     = parseFloat(row[colUnits] || 0);
-
     if (!styleDesc || total <= 0) continue;
 
     const silhouette = getSilhouette('', styleDesc + ' ' + styleCode);
-    const scaleInfo  = REORDER_SIL_SCALE[silhouette];
-    if (!scaleInfo) continue;
 
-    const { indices, ratios } = scaleInfo;
-    const totalParts = ratios.reduce((a, b) => a + b, 0);
-    const unit = total / totalParts;
-    const breakout = new Array(7).fill(0);
-    ratios.forEach((r2, i) => { breakout[indices[i]] = r2 * unit; });
+    let breakout;
+
+    if (colSizeRange >= 0 && colSizeScale >= 0) {
+      // Format B: use explicit size range and scale
+      const sizeRange = (row[colSizeRange] || '').trim();
+      const scaleStr  = (row[colSizeScale] || '').trim();
+      const ratios    = scaleStr.split('-').map(Number).filter(n => !isNaN(n));
+      const scale     = SIZE_SCALES[sizeRange];
+
+      if (scale && ratios.length === scale.indices.length) {
+        const totalParts = ratios.reduce((a, b) => a + b, 0);
+        const unit = total / totalParts;
+        breakout = new Array(7).fill(0);
+        scale.indices.forEach((idx, i) => { breakout[idx] = ratios[i] * unit; });
+      } else if (scale) {
+        // Fall back to default ratios for this range
+        const totalParts = scale.ratios.reduce((a, b) => a + b, 0);
+        const unit = total / totalParts;
+        breakout = new Array(7).fill(0);
+        scale.indices.forEach((idx, i) => { breakout[idx] = scale.ratios[i] * unit; });
+      } else continue;
+    } else {
+      // Format A: derive from silhouette
+      const scaleInfo = REORDER_SIL_SCALE[silhouette];
+      if (!scaleInfo) continue;
+      const { indices, ratios } = scaleInfo;
+      const totalParts = ratios.reduce((a, b) => a + b, 0);
+      const unit = total / totalParts;
+      breakout = new Array(7).fill(0);
+      ratios.forEach((r2, i) => { breakout[indices[i]] = r2 * unit; });
+    }
 
     results.push({ styleDesc, color: '', silhouette, breakout, total });
   }
 
   if (results.length === 0) {
-    showError('No valid rows found. Check that Style Description and Units are populated.');
+    showError('No valid rows found. Check that Style Description and Units/NEED are populated.');
     return;
   }
 
