@@ -999,29 +999,35 @@ function parseWS(workbook) {
     const sheet = workbook.Sheets[sheetName];
     const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-    // Fixed column positions based on file structure
-    // Col 6 = Description, 12 = Color, 13 = Vendor SKU, 16 = Size, 26 = Qty
-    const COL_DESC  = 6;
-    const COL_COLOR = 12;
-    const COL_VPN   = 13;
-    const COL_SIZE  = 16;
-    const COL_QTY   = 26;
+    // Find column positions dynamically from any header row containing "Description"
+    let COL_DESC = 6, COL_COLOR = 12, COL_VPN = 13, COL_SIZE = 16, COL_QTY = 26;
+
+    for (let r = 0; r < raw.length; r++) {
+      const row = raw[r].map(c => String(c).trim().toLowerCase());
+      if (row.some(c => c === 'description')) {
+        row.forEach((h, i) => {
+          if (h === 'description')           COL_DESC  = i;
+          if (h === 'product color' || h === 'color') COL_COLOR = i;
+          if (h === 'vendor sku' || h === 'vendor part number') COL_VPN = i;
+          if (h === 'size')                  COL_SIZE  = i;
+          if (h === 'qty' || h === 'quantity') COL_QTY = i;
+        });
+        break;
+      }
+    }
 
     for (let r = 0; r < raw.length; r++) {
       const row = raw[r];
-      // Skip header rows and totals rows
-      const cell4 = String(row[4] || '').trim();
-      const cell6 = String(row[6] || '').trim();
-      if (cell6 === 'Description' || cell6 === '' || cell4 === '') continue;
-      if (String(row[19] || '').includes('Totals')) continue;
-
       const desc    = String(row[COL_DESC]  || '').trim();
       const color   = String(row[COL_COLOR] || '').trim();
       const vpn     = String(row[COL_VPN]   || '').trim();
       const sizeRaw = String(row[COL_SIZE]  || '').trim().toUpperCase();
       const qty     = parseFloat(row[COL_QTY] || 0);
 
+      // Skip non-data rows
       if (!desc || !vpn || qty <= 0) continue;
+      if (desc.toLowerCase() === 'description') continue;
+      if (String(row[19] || '').toLowerCase().includes('total')) continue;
 
       const sIdx = sizeIndex[sizeRaw];
       if (sIdx === undefined) continue;
