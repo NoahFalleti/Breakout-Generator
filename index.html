@@ -330,6 +330,7 @@
 <div class="retailer-row">
   <button class="r-btn" id="btnDSG" onclick="setRetailer('dsg')">Dick's Sporting Goods</button>
   <button class="r-btn" id="btnRally" onclick="setRetailer('rally')">Rally House</button>
+  <button class="r-btn" id="btnWS" onclick="setRetailer('ws')">WS</button>
 </div>
 
 <div class="retailer-row" id="orderTypeRow">
@@ -399,16 +400,17 @@ function setRetailer(r) {
   currentRetailer = r;
   document.getElementById('btnDSG').classList.toggle('active', r === 'dsg');
   document.getElementById('btnRally').classList.toggle('active', r === 'rally');
-  // Rally House only has new orders (file upload), hide order type toggle
-  document.getElementById('orderTypeRow').style.display = r === 'rally' ? 'none' : '';
-  // Always show upload zone for Rally
-  if (r === 'rally') {
-    document.getElementById('uploadZone').style.display  = '';
-    document.getElementById('pasteZone').style.display   = 'none';
+  document.getElementById('btnWS').classList.toggle('active', r === 'ws');
+  // Only DSG shows order type toggle
+  document.getElementById('orderTypeRow').style.display = r === 'dsg' ? '' : 'none';
+  // Always show upload zone for Rally and WS
+  if (r !== 'dsg') {
+    document.getElementById('uploadZone').style.display = '';
+    document.getElementById('pasteZone').style.display  = 'none';
     currentOrderType = 'new';
   }
-  document.getElementById('uploadLabel').textContent =
-    r === 'rally' ? 'Drop your Rally House file here' : 'Drop your DSG buy sheet here';
+  const labels = { dsg: 'Drop your DSG buy sheet here', rally: 'Drop your Rally House file here', ws: 'Drop your WS order file here' };
+  document.getElementById('uploadLabel').textContent = labels[r] || 'Drop your file here';
   resetTool();
 }
 
@@ -983,6 +985,68 @@ function parseRallyHouse(workbook) {
   return allResults;
 }
 
+// ── WS parser ─────────────────────────────────────────────────────────────────
+function parseWS(workbook) {
+  const sizeIndex = {
+    'XS': 0, 'S': 1, 'SM': 1, 'M': 2, 'MD': 2,
+    'L': 3, 'LG': 3, 'XL': 4, 'XXL': 5, '2XL': 5,
+    'XXXL': 6, '3XL': 6
+  };
+
+  const styleMap = new Map();
+
+  workbook.SheetNames.forEach(sheetName => {
+    const sheet = workbook.Sheets[sheetName];
+    const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    // Fixed column positions based on file structure
+    // Col 6 = Description, 12 = Color, 13 = Vendor SKU, 16 = Size, 26 = Qty
+    const COL_DESC  = 6;
+    const COL_COLOR = 12;
+    const COL_VPN   = 13;
+    const COL_SIZE  = 16;
+    const COL_QTY   = 26;
+
+    for (let r = 0; r < raw.length; r++) {
+      const row = raw[r];
+      // Skip header rows and totals rows
+      const cell4 = String(row[4] || '').trim();
+      const cell6 = String(row[6] || '').trim();
+      if (cell6 === 'Description' || cell6 === '' || cell4 === '') continue;
+      if (String(row[19] || '').includes('Totals')) continue;
+
+      const desc    = String(row[COL_DESC]  || '').trim();
+      const color   = String(row[COL_COLOR] || '').trim();
+      const vpn     = String(row[COL_VPN]   || '').trim();
+      const sizeRaw = String(row[COL_SIZE]  || '').trim().toUpperCase();
+      const qty     = parseFloat(row[COL_QTY] || 0);
+
+      if (!desc || !vpn || qty <= 0) continue;
+
+      const sIdx = sizeIndex[sizeRaw];
+      if (sIdx === undefined) continue;
+
+      if (!styleMap.has(vpn)) {
+        styleMap.set(vpn, {
+          styleDesc: desc,
+          color: normalizeColor(color, '', desc),
+          silhouette: getSilhouette('', desc),
+          breakout: new Array(7).fill(0),
+          total: 0
+        });
+      }
+
+      const entry = styleMap.get(vpn);
+      entry.breakout[sIdx] += qty;
+      entry.total          += qty;
+    }
+  });
+
+  return styleMap.size > 0
+    ? [{ name: 'WS', rows: Array.from(styleMap.values()) }]
+    : [];
+}
+
 function handleFile(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -993,9 +1057,11 @@ function handleFile(file) {
 
       const markets = currentRetailer === 'rally'
         ? parseRallyHouse(wb)
-        : currentOrderType === 'reorder'
-          ? parseReorder(wb)
-          : wb.SheetNames.map(name => ({ name, rows: parseSheet(wb.Sheets[name]) }));
+        : currentRetailer === 'ws'
+          ? parseWS(wb)
+          : currentOrderType === 'reorder'
+            ? parseReorder(wb)
+            : wb.SheetNames.map(name => ({ name, rows: parseSheet(wb.Sheets[name]) }));
 
       const totalRows = markets.reduce((a, m) => a + m.rows.length, 0);
       if (totalRows === 0) {
@@ -1022,6 +1088,8 @@ function showError(msg) {
 document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
 // Initialize
 document.getElementById('btnDSG').classList.add('active');
+document.getElementById('btnWS').classList.remove('active');
+document.getElementById('btnRally').classList.remove('active');
 
 const zone = document.getElementById('uploadZone');
 zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
