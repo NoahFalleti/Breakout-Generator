@@ -374,9 +374,11 @@
 // ── Size scales ───────────────────────────────────────────────────────────────
 const SIZE_SCALES = {
   'S-XXL':  { indices: [1,2,3,4,5], ratios: [2,2,3,3,2] },
+  'SM-XXL': { indices: [1,2,3,4,5], ratios: [2,2,3,3,2] },
   'XS-XL':  { indices: [0,1,2,3,4], ratios: [2,3,3,3,1] },
   'S-XL':   { indices: [1,2,3,4],   ratios: [3,4,3,2]   },
-  'S-XL-Y': { indices: [1,2,3,4],   ratios: [2,4,4,2]   }, // youth
+  'SM-XL':  { indices: [1,2,3,4],   ratios: [3,4,3,2]   },
+  'S-XL-Y': { indices: [1,2,3,4],   ratios: [2,4,4,2]   },
 };
 
 // ── Reorder silhouette → size scale lookup ────────────────────────────────────
@@ -430,119 +432,99 @@ function handlePaste() {
   const rawLines = raw.split('\n').map(l => l.trim()).filter(l => l);
   const hasTabs = rawLines.some(l => l.includes('\t'));
 
-  let lines;
-  if (hasTabs) {
-    lines = rawLines.map(l => l.split('\t').map(c => c.trim()));
-  } else {
-    // One cell per line — detect column count from header
-    // Look for known header sequences
-    let startIdx = -1;
-    let colCount = 0;
+  let results = [];
 
-    // Format A: Style / Style Description / Units (3 cols)
-    for (let i = 0; i < rawLines.length - 2; i++) {
-      if (
-        rawLines[i].toLowerCase() === 'style' &&
-        rawLines[i+1].toLowerCase() === 'style description' &&
-        rawLines[i+2].toLowerCase() === 'units'
-      ) {
-        startIdx = i;
-        colCount = 3;
+  if (hasTabs) {
+    const lines = rawLines.map(l => l.split('\t').map(c => c.trim()));
+    const header = lines[0].map(c => c.toLowerCase());
+    const colDesc      = header.findIndex(h => h.includes('desc'));
+    const colUnits     = header.findIndex(h => h.includes('unit') || h.includes('need') || h === 'qty');
+    const colSizeRange = header.findIndex(h => (h.includes('size') || h.includes('sizing')) && !h.includes('scale'));
+    const colSizeScale = header.findIndex(h => h.includes('scale'));
+    const colStyle     = header.findIndex(h => h.includes('style'));
+    if (colDesc === -1 || colUnits === -1) { showError('Could not find Style Description or Units columns.'); return; }
+    for (let r = 1; r < lines.length; r++) {
+      const row = lines[r];
+      const styleDesc = (row[colDesc] || '').trim();
+      const styleCode = colStyle >= 0 ? (row[colStyle] || '').trim().toUpperCase() : '';
+      const total = parseFloat(row[colUnits] || 0);
+      if (!styleDesc || total <= 0) continue;
+      const silhouette = getSilhouette('', styleDesc + ' ' + styleCode);
+      const breakout = calcReorderBreakout(silhouette, total, colSizeRange >= 0 ? (row[colSizeRange]||'').trim() : '', colSizeScale >= 0 ? (row[colSizeScale]||'').trim() : '');
+      if (!breakout) continue;
+      results.push({ styleDesc, color: '', silhouette, breakout, total });
+    }
+  } else {
+    // One cell per line — find header block by scanning for keyword lines
+    const isHeaderLine = l => {
+      const v = l.toLowerCase();
+      return v.includes('style') || v.includes('desc') || v.includes('unit') ||
+             v.includes('need') || v.includes('size') || v.includes('scale') ||
+             v.includes('vendor') || v.includes('qty') || v === 'sizing';
+    };
+
+    let headerStart = -1, headerEnd = -1;
+    for (let i = 0; i < rawLines.length; i++) {
+      if (isHeaderLine(rawLines[i])) {
+        if (headerStart === -1) headerStart = i;
+        headerEnd = i;
+      } else if (headerStart >= 0) {
         break;
       }
     }
 
-    // Format B: Style # / Style Desc / Vendor / NEED / Size Range / Size Scale (6 cols)
-    if (startIdx === -1) {
-      for (let i = 0; i < rawLines.length - 5; i++) {
-        if (
-          (rawLines[i].toLowerCase() === 'style #' || rawLines[i].toLowerCase() === 'style#') &&
-          rawLines[i+1].toLowerCase().includes('style desc') &&
-          rawLines[i+3].toLowerCase().includes('need')
-        ) {
-          startIdx = i;
-          colCount = 6;
-          break;
-        }
-      }
-    }
+    if (headerStart === -1) { showError('Could not find a header row. Make sure you paste the full table including headers.'); return; }
 
-    if (startIdx === -1) {
-      showError('Could not find a recognized header row. Make sure you paste the full table including headers.');
-      return;
-    }
+    const headerLines = rawLines.slice(headerStart, headerEnd + 1).map(l => l.toLowerCase());
+    const colCount    = headerLines.length;
+    const colDesc      = headerLines.findIndex(h => h.includes('desc'));
+    const colUnits     = headerLines.findIndex(h => h.includes('unit') || h.includes('need') || h === 'qty');
+    const colSizeRange = headerLines.findIndex(h => (h.includes('size') || h.includes('sizing')) && !h.includes('scale'));
+    const colSizeScale = headerLines.findIndex(h => h.includes('scale'));
+    const colStyle     = headerLines.findIndex(h => h.includes('style'));
 
-    lines = [];
-    for (let i = startIdx; i + colCount - 1 < rawLines.length; i += colCount) {
-      lines.push(rawLines.slice(i, i + colCount));
+    if (colDesc === -1 || colUnits === -1) { showError('Could not find Style Description or Units/Need columns.'); return; }
+
+    const dataLines = rawLines.slice(headerEnd + 1);
+    for (let i = 0; i + colCount - 1 < dataLines.length; i += colCount) {
+      const row = dataLines.slice(i, i + colCount);
+      const styleDesc = (row[colDesc] || '').trim();
+      const styleCode = colStyle >= 0 ? (row[colStyle] || '').trim().toUpperCase() : '';
+      const total = parseFloat(row[colUnits] || 0);
+      if (!styleDesc || total <= 0) continue;
+      const silhouette = getSilhouette('', styleDesc + ' ' + styleCode);
+      const breakout = calcReorderBreakout(silhouette, total, colSizeRange >= 0 ? (row[colSizeRange]||'').trim() : '', colSizeScale >= 0 ? (row[colSizeScale]||'').trim() : '');
+      if (!breakout) continue;
+      results.push({ styleDesc, color: '', silhouette, breakout, total });
     }
   }
 
-  const header = lines[0].map(c => c.toLowerCase());
-  const colDesc      = header.findIndex(h => h.includes('style desc'));
-  const colUnits     = header.findIndex(h => h === 'units' || h === 'need');
-  const colSizeRange = header.findIndex(h => h.includes('size range'));
-  const colSizeScale = header.findIndex(h => h.includes('size scale'));
-  const colStyle     = header.findIndex(h => h === 'style' || h === 'style #' || h === 'style#');
-
-  if (colDesc === -1 || colUnits === -1) {
-    showError('Could not find required columns. Make sure your table has Style Description and Units/NEED columns.');
-    return;
-  }
-
-  const results = [];
-  for (let r = 1; r < lines.length; r++) {
-    const row = lines[r];
-    const styleDesc = (row[colDesc]  || '').trim();
-    const styleCode = colStyle >= 0 ? (row[colStyle] || '').trim().toUpperCase() : '';
-    const total     = parseFloat(row[colUnits] || 0);
-    if (!styleDesc || total <= 0) continue;
-
-    const silhouette = getSilhouette('', styleDesc + ' ' + styleCode);
-
-    let breakout;
-
-    if (colSizeRange >= 0 && colSizeScale >= 0) {
-      // Format B: use explicit size range and scale
-      const sizeRange = (row[colSizeRange] || '').trim();
-      const scaleStr  = (row[colSizeScale] || '').trim();
-      const ratios    = scaleStr.split('-').map(Number).filter(n => !isNaN(n));
-      const scale     = SIZE_SCALES[sizeRange];
-
-      if (scale && ratios.length === scale.indices.length) {
-        const totalParts = ratios.reduce((a, b) => a + b, 0);
-        const unit = total / totalParts;
-        breakout = new Array(7).fill(0);
-        scale.indices.forEach((idx, i) => { breakout[idx] = ratios[i] * unit; });
-      } else if (scale) {
-        // Fall back to default ratios for this range
-        const totalParts = scale.ratios.reduce((a, b) => a + b, 0);
-        const unit = total / totalParts;
-        breakout = new Array(7).fill(0);
-        scale.indices.forEach((idx, i) => { breakout[idx] = scale.ratios[i] * unit; });
-      } else continue;
-    } else {
-      // Format A: derive from silhouette
-      const scaleInfo = REORDER_SIL_SCALE[silhouette];
-      if (!scaleInfo) continue;
-      const { indices, ratios } = scaleInfo;
-      const totalParts = ratios.reduce((a, b) => a + b, 0);
-      const unit = total / totalParts;
-      breakout = new Array(7).fill(0);
-      ratios.forEach((r2, i) => { breakout[indices[i]] = r2 * unit; });
-    }
-
-    results.push({ styleDesc, color: '', silhouette, breakout, total });
-  }
-
-  if (results.length === 0) {
-    showError('No valid rows found. Check that Style Description and Units/NEED are populated.');
-    return;
-  }
-
+  if (results.length === 0) { showError('No valid rows found. Check that Style Description and Units/Need are populated.'); return; }
   document.getElementById('errorBox').style.display = 'none';
   renderAll([{ name: 'Reorder', rows: results }]);
 }
+
+function calcReorderBreakout(silhouette, total, sizeRange, scaleStr) {
+  if (sizeRange && SIZE_SCALES[sizeRange]) {
+    const scale = SIZE_SCALES[sizeRange];
+    const ratios = scaleStr ? scaleStr.split('-').map(Number).filter(n => !isNaN(n) && n > 0) : scale.ratios;
+    const useRatios = ratios.length === scale.indices.length ? ratios : scale.ratios;
+    const totalParts = useRatios.reduce((a, b) => a + b, 0);
+    const unit = total / totalParts;
+    const breakout = new Array(7).fill(0);
+    scale.indices.forEach((idx, i) => { breakout[idx] = useRatios[i] * unit; });
+    return breakout;
+  }
+  const scaleInfo = REORDER_SIL_SCALE[silhouette];
+  if (!scaleInfo) return null;
+  const { indices, ratios } = scaleInfo;
+  const totalParts = ratios.reduce((a, b) => a + b, 0);
+  const unit = total / totalParts;
+  const breakout = new Array(7).fill(0);
+  ratios.forEach((r, i) => { breakout[indices[i]] = r * unit; });
+  return breakout;
+}
+
 
 // ── Color normalization ───────────────────────────────────────────────────────
 function normalizeColor(rawColor, silhouette, styleDesc) {
