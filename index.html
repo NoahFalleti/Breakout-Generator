@@ -532,21 +532,29 @@ function normalizeColor(rawColor, silhouette, styleDesc) {
   const s = (silhouette || '').toLowerCase();
   const d = (styleDesc  || '').toUpperCase();
 
-  const isEasyTee  = d.includes('EASY') || s.includes('easy');
+  const isEasyTee  = d.includes('EASY') || s.includes('easy') ||
+                     ((/ W /.test(d) || d.startsWith('W ')) && (d.includes('SS') || d.includes('TEE')));
   const isCotton   = s.includes('cotton');
 
   const isWhite = c === 'WHT' || c === 'WHITE';
   const isCream = c === 'CRM' || c === 'CREAM' || c === 'NATURAL' || c === 'OAT' || c === 'OATMEAL';
   const isMineral = c === 'MINERAL';
 
+  const isBrown = c === 'BROWN';
+  const isAsh   = c === 'ASH';
+  const isOatmeal = c === 'OATMEAL' || c === 'OAT';
+
+  if (isEasyTee) {
+    if (isBrown || isOatmeal || isCream) return 'Bone';
+    if (isAsh || isWhite)                return 'White';
+  }
+
   if (isWhite) {
-    if (isEasyTee)  return 'White';
     if (isCotton)   return 'White Cotton';
     return 'Ash';
   }
 
   if (isCream) {
-    if (isEasyTee)  return 'Bone';
     if (isCotton)   return 'Bone Cotton';
     return 'Oatmeal';
   }
