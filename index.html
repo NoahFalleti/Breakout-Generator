@@ -612,6 +612,8 @@ function getSilhouette(rawSil, styleDesc) {
   if (d.includes('YOUTH') || d.includes('YTH') || d.includes('YSS') || d.includes('YSST')) return 'Youth Tee';
   if (d.includes('HOOD') || d.includes('HOODY') || d.includes('HDY') || d.includes(' HD ') || d.endsWith(' HD')) return 'Hoodie';
   if (d.includes(' CR ') || d.endsWith(' CR'))  return 'Crew Sweatshirt';
+  // Standalone W = Womens SS Tee → Easy Tee
+  if ((/ W /.test(d) || d.startsWith('W ')) && (d.includes('SS') || d.includes('TEE'))) return 'Easy Tee';
   if (d.includes('SST') || d.includes('TEE') || d.includes(' SS ') || d.endsWith(' SS')) return 'Tee';
 
   if (s.includes('youth'))             return 'Youth Tee';
