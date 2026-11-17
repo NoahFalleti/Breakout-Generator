@@ -699,6 +699,11 @@ function normalizeColor(rawColor, silhouette, styleDesc) {
   const s = (silhouette || '').toLowerCase();
   const d = (styleDesc  || '').toUpperCase();
 
+  // Infant / toddler: keep the color as listed
+  if (d.includes('CREEPER') || d.includes('TDLR') || d.includes(' INF ')) {
+    return rawColor.trim().replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  }
+
   const isEasyTee  = d.includes('EASY') || s.includes('easy') ||
                      ((/ W /.test(d) || d.startsWith('W ')) && (d.includes('SS') || d.includes('TEE')));
   const isCotton   = s.includes('cotton');
@@ -777,6 +782,10 @@ function getSilhouette(rawSil, styleDesc) {
 
   // Check raw silhouette column first for Easy Tee before any style desc rules
   if (s.includes('easy'))              return 'Easy Tee';
+
+  // Infant / toddler
+  if (d.includes('CREEPER') || d.includes(' INF '))  return 'Onesie';
+  if (d.includes('TDLR'))              return 'Toddler Tee';
 
   if (d.includes('WLSC'))              return 'Cropped Crew Sweatshirt';
   if (d.includes('WSSC'))              return 'Cropped Tee';
@@ -1080,7 +1089,9 @@ function parseRallyHouse(workbook) {
     const sizeIndex = {
       'XS': 0, 'S': 1, 'SM': 1, 'M': 2, 'MD': 2,
       'L': 3, 'LG': 3, 'XL': 4, 'XXL': 5, '2XL': 5,
-      'XXXL': 6, '3XL': 6
+      'XXXL': 6, '3XL': 6,
+      'NB': 0, '6M': 1, '12M': 2, '18M': 3,
+      '2T': 0, '3T': 1, '4T': 2, '5T': 3
     };
 
     const header = raw[0].map(c => String(c).trim().toUpperCase());
